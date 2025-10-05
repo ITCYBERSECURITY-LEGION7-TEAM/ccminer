@@ -261,7 +261,8 @@ create_config() {
     
     simulate_hacker_loading "Creating optimized config.json" 1.0
     
-    cat > $CONFIG_FILE << EOF
+    # Create the config file with proper JSON formatting
+    cat > "$CONFIG_FILE" << EOF
 {
     "pools": [
         {
@@ -333,10 +334,17 @@ check_dependencies() {
         echo -e "${GREEN}✓ jq JSON processor${NC}"
     fi
     
+    # Check python3 for JSON validation
+    if ! command -v python3 &> /dev/null; then
+        echo -e "${YELLOW}⚠ python3 not found (optional)${NC}"
+    else
+        echo -e "${GREEN}✓ python3 JSON validator${NC}"
+    fi
+    
     # Check directory structure
     if [ ! -d "$CCMINER_PATH" ]; then
         echo -e "${YELLOW}⚠ Creating ccminer directory${NC}"
-        mkdir -p $CCMINER_PATH
+        mkdir -p "$CCMINER_PATH"
     fi
     
     if [ ! -f "$CCMINER_BIN" ]; then
@@ -349,7 +357,7 @@ check_dependencies() {
     
     if [ "$deps_ok" = false ]; then
         echo -e "\n${RED}❌ Missing dependencies. Please install required packages.${NC}"
-        echo -e "${YELLOW}Run: sudo apt-get update && sudo apt-get install bc jq${NC}"
+        echo -e "${YELLOW}Run: pkg update && pkg install bc jq python${NC}"
         exit 1
     fi
     
@@ -365,23 +373,53 @@ validate_config() {
         return 1
     fi
     
-    # Basic JSON validation
-    if python3 -m json.tool "$CONFIG_FILE" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Valid JSON structure${NC}"
-    else
-        echo -e "${RED}✗ Invalid JSON configuration${NC}"
+    # Check file size
+    if [ ! -s "$CONFIG_FILE" ]; then
+        echo -e "${RED}✗ Config file is empty${NC}"
         return 1
     fi
     
+    # Basic JSON validation using Python
+    if command -v python3 &> /dev/null; then
+        if python3 -c "import json; json.load(open('$CONFIG_FILE'))" 2>/dev/null; then
+            echo -e "${GREEN}✓ Valid JSON structure${NC}"
+        else
+            echo -e "${RED}✗ Invalid JSON configuration${NC}"
+            echo -e "${YELLOW}Debug info:${NC}"
+            python3 -c "import json; json.load(open('$CONFIG_FILE'))" 2>&1 | head -5
+            return 1
+        fi
+    elif command -v jq &> /dev/null; then
+        # Fallback validation with jq
+        if jq empty "$CONFIG_FILE" 2>/dev/null; then
+            echo -e "${GREEN}✓ Valid JSON structure${NC}"
+        else
+            echo -e "${RED}✗ Invalid JSON configuration${NC}"
+            jq empty "$CONFIG_FILE" 2>&1 | head -5
+            return 1
+        fi
+    else
+        echo -e "${YELLOW}⚠ Skipping JSON validation (python3/jq not available)${NC}"
+    fi
+    
     # Check if required fields exist
-    if grep -q "\"user\":" "$CONFIG_FILE" && grep -q "\"url\":" "$CONFIG_FILE"; then
+    if grep -q "\"user\"" "$CONFIG_FILE" && grep -q "\"url\"" "$CONFIG_FILE"; then
         echo -e "${GREEN}✓ Required configuration fields present${NC}"
     else
         echo -e "${RED}✗ Missing required configuration fields${NC}"
         return 1
     fi
     
+    # Validate specific values
+    if grep -q "\"threads\": $threads" "$CONFIG_FILE"; then
+        echo -e "${GREEN}✓ Threads configuration correct${NC}"
+    else
+        echo -e "${RED}✗ Threads configuration mismatch${NC}"
+        return 1
+    fi
+    
     simulate_hacker_loading "Final configuration validation" 0.5
+    echo -e "${GREEN}✅ Configuration validation passed${NC}"
     return 0
 }
 
@@ -394,7 +432,35 @@ show_config_summary() {
     echo -e "${YELLOW}⚡ CPU Usage: ${GREEN}${CPU_USAGE}%${NC}"
     echo -e "${YELLOW}🔗 Pool: ${GREEN}$POOL_NAME${NC}"
     echo -e "${YELLOW}📁 Config: ${GREEN}$CONFIG_FILE${NC}"
+    echo -e "${YELLOW}⚙️  Threads: ${GREEN}$threads${NC}"
     echo -e "${CYAN}=================================================${NC}"
+}
+
+# Function to test pool connection
+test_pool_connection() {
+    echo -e "${BLUE}🌐 TESTING POOL CONNECTION${NC}"
+    
+    local pool_host
+    case $SELECTED_POOL in
+        *luckpool.net*)
+            pool_host=$(echo "$SELECTED_POOL" | cut -d: -f1)
+            ;;
+        *vipor.net*)
+            pool_host=$(echo "$SELECTED_POOL" | cut -d: -f1)
+            ;;
+        *)
+            pool_host=$SELECTED_POOL
+            ;;
+    esac
+    
+    if ping -c 2 -W 3 "$pool_host" &> /dev/null; then
+        echo -e "${GREEN}✓ Pool $pool_host is reachable${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠ Cannot ping $pool_host (may be blocked by firewall)${NC}"
+        echo -e "${YELLOW}Continuing anyway...${NC}"
+        return 0
+    fi
 }
 
 # Function to launch miner
@@ -402,6 +468,9 @@ launch_miner() {
     echo
     echo -e "${GREEN}🚀 INITIATING MINING SEQUENCE${NC}"
     echo -e "${CYAN}=================================================${NC}"
+    
+    # Test pool connection first
+    test_pool_connection
     
     # Final countdown with hacker style
     for i in {5..1}; do
@@ -411,13 +480,72 @@ launch_miner() {
     
     echo -e "${GREEN}🎯 MINER ACTIVATED! Press Ctrl+C to terminate.${NC}"
     echo -e "${CYAN}=================================================${NC}"
+    echo -e "${YELLOW}📊 Monitoring mining session...${NC}"
     echo
     
     # Launch the miner
     if [ -f "$CCMINER_BIN" ] && [ -f "$CONFIG_FILE" ]; then
-        $CCMINER_BIN -c $CONFIG_FILE
+        cd "$CCMINER_PATH" || {
+            echo -e "${RED}❌ ERROR: Cannot access ccminer directory${NC}"
+            exit 1
+        }
+        "$CCMINER_BIN" -c "$CONFIG_FILE"
     else
         echo -e "${RED}❌ ERROR: Miner binary or config not found${NC}"
+        echo -e "${YELLOW}Binary: $CCMINER_BIN${NC}"
+        echo -e "${YELLOW}Config: $CONFIG_FILE${NC}"
+        exit 1
+    fi
+}
+
+# Function to show system info
+show_system_info() {
+    echo -e "${PURPLE}💻 SYSTEM INFORMATION${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    
+    # CPU info
+    if [ -f "/proc/cpuinfo" ]; then
+        cpu_cores=$(grep -c "^processor" /proc/cpuinfo)
+        cpu_model=$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^ *//')
+        echo -e "${YELLOW}CPU: ${GREEN}$cpu_model${NC}"
+        echo -e "${YELLOW}Cores: ${GREEN}$cpu_cores${NC}"
+    fi
+    
+    # Memory info
+    if command -v free &> /dev/null; then
+        total_mem=$(free -h 2>/dev/null | grep Mem: | awk '{print $2}' || echo "Unknown")
+        echo -e "${YELLOW}Memory: ${GREEN}$total_mem${NC}"
+    fi
+    
+    # OS info
+    if [ -f "/etc/os-release" ]; then
+        os_name=$(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '"')
+        echo -e "${YELLOW}OS: ${GREEN}$os_name${NC}"
+    fi
+    
+    echo -e "${CYAN}=================================================${NC}"
+    echo
+}
+
+# Function to install missing dependencies
+install_dependencies() {
+    echo -e "${PURPLE}📦 INSTALLING MISSING DEPENDENCIES${NC}"
+    
+    if command -v pkg &> /dev/null; then
+        # Termux environment
+        echo -e "${YELLOW}Detected Termux environment${NC}"
+        pkg update && pkg install -y bc jq python
+    elif command -v apt-get &> /dev/null; then
+        # Ubuntu/Debian environment
+        echo -e "${YELLOW}Detected Ubuntu/Debian environment${NC}"
+        sudo apt-get update && sudo apt-get install -y bc jq python3
+    elif command -v yum &> /dev/null; then
+        # CentOS/RHEL environment
+        echo -e "${YELLOW}Detected CentOS/RHEL environment${NC}"
+        sudo yum install -y bc jq python3
+    else
+        echo -e "${RED}❌ Cannot detect package manager${NC}"
+        echo -e "${YELLOW}Please manually install: bc jq python3${NC}"
         exit 1
     fi
 }
@@ -429,6 +557,20 @@ main() {
     # Initial system check
     simulate_hacker_loading "System initialization" 1.5
     
+    show_system_info
+    
+    # Check and install dependencies if needed
+    if ! command -v bc &> /dev/null || ! command -v jq &> /dev/null; then
+        echo -e "${YELLOW}⚠ Some dependencies are missing${NC}"
+        read -p "$(echo -e "${CYAN}Install missing dependencies? (y/n): ${NC}")" -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            install_dependencies
+        else
+            echo -e "${YELLOW}Continuing without installing dependencies...${NC}"
+        fi
+    fi
+    
     check_dependencies
     get_user_input
     
@@ -438,10 +580,21 @@ main() {
     
     if validate_config; then
         show_config_summary
-        launch_miner
+        
+        # Final confirmation
+        echo
+        read -p "$(echo -e "${CYAN}Launch miner now? (y/n): ${NC}")" -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            launch_miner
+        else
+            echo -e "${YELLOW}Configuration saved. You can run the miner later with:${NC}"
+            echo -e "${GREEN}$CCMINER_BIN -c $CONFIG_FILE${NC}"
+        fi
     else
         echo -e "${RED}❌ Configuration validation failed${NC}"
         echo -e "${YELLOW}Please check your settings and try again${NC}"
+        echo -e "${YELLOW}You can manually edit the config file: $CONFIG_FILE${NC}"
         exit 1
     fi
 }
@@ -450,6 +603,14 @@ main() {
 cleanup() {
     echo -e "\n${RED}⚠ Script interrupted${NC}"
     echo -e "${YELLOW}Cleaning up...${NC}"
+    
+    # Kill miner process if running
+    if pgrep -f "ccminer" > /dev/null; then
+        echo -e "${YELLOW}Stopping miner processes...${NC}"
+        pkill -f "ccminer"
+    fi
+    
+    echo -e "${GREEN}Cleanup completed.${NC}"
     exit 1
 }
 
