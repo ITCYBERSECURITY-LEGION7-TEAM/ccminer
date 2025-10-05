@@ -1,0 +1,463 @@
+#!/bin/bash
+
+# Colors for UI
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+NC='\033[0m' # No Color
+
+# Config paths
+CCMINER_PATH="$HOME/ccminer"
+CONFIG_FILE="$CCMINER_PATH/config.json"
+CCMINER_BIN="$CCMINER_PATH/ccminer"
+
+# Global variables
+WALLET_ADDRESS=""
+WORKER_NAME=""
+CPU_USAGE=""
+SELECTED_POOL=""
+POOL_NAME=""
+
+# Function to display hacker animation with percentage
+hacker_animation() {
+    local progress=$1
+    local task_name=$2
+    local width=50
+    local filled=$((width * progress / 100))
+    local empty=$((width - filled))
+    
+    # Hacker-style random characters
+    hacker_chars=("0101" "0110" "1010" "1100" "0011" "1001" "0110" "1011" "1101" "1110")
+    random_char1=${hacker_chars[$RANDOM % ${#hacker_chars[@]}]}
+    random_char2=${hacker_chars[$RANDOM % ${#hacker_chars[@]}]}
+    
+    printf "\r${CYAN}[${GREEN}"
+    for ((i=0; i<filled; i++)); do
+        printf "█"
+    done
+    printf "${CYAN}"
+    for ((i=0; i<empty; i++)); do
+        printf "▒"
+    done
+    printf "${CYAN}] ${progress}%% ${PURPLE}${task_name} ${YELLOW}[${random_char1}:${random_char2}]${NC}"
+}
+
+# Function to simulate loading with hacker style
+simulate_hacker_loading() {
+    local task_name=$1
+    local duration=$2
+    
+    echo -e "${BLUE}▶ INITIATING: ${task_name}...${NC}"
+    echo
+    
+    for i in $(seq 1 100); do
+        hacker_animation $i "$task_name"
+        sleep $(echo "scale=3; $duration/100" | bc -l 2>/dev/null || echo "0.01")
+    done
+    echo -e "\n${GREEN}✓ COMPLETED: ${task_name}${NC}\n"
+}
+
+# Function to display advanced hacker banner
+display_banner() {
+    clear
+    echo -e "${GREEN}"
+    # ASCII Art yang lebih kompatibel
+    echo "  ██████╗ ██████╗███╗   ███╗██╗███╗   ██╗███████╗██████╗ "
+    echo " ██╔════╝██╔════╝████╗ ████║██║████╗  ██║██╔════╝██╔══██╗"
+    echo " ██║     ██║     ██╔████╔██║██║██╔██╗ ██║█████╗  ██████╔╝"
+    echo " ██║     ██║     ██║╚██╔╝██║██║██║╚██╗██║██╔══╝  ██╔══██╗"
+    echo " ╚██████╗╚██████╗██║ ╚═╝ ██║██║██║ ╚████║███████╗██║  ██║"
+    echo "  ╚═════╝ ╚═════╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝"
+    echo -e "${CYAN}=================================================${NC}"
+    echo -e "${YELLOW}          ADVANCED MINING LAUNCHER v2.0${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    echo
+}
+
+# Function to display pool menu
+show_pool_menu() {
+    echo -e "${PURPLE}🌍 SELECT MINING POOL - LUCKPOOL & VIPOR NETWORK${NC}"
+    echo -e "${CYAN}┌─────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│ ${YELLOW}LUCKPOOL NETWORK${NC}                               ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}1. Europe (EU)${NC}     - eu.luckpool.net:3960      ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}2. Asia (SG)${NC}       - sg.luckpool.net:3960      ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}3. America (US)${NC}    - us.luckpool.net:3960      ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}4. Australia (AU)${NC}  - au.luckpool.net:3960      ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}5. Brazil (BR)${NC}     - br.luckpool.net:3960      ${CYAN}│${NC}"
+    echo -e "${CYAN}│                                                 │${NC}"
+    echo -e "${CYAN}│ ${YELLOW}VIPOR NETWORK${NC}                                 ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}6. Europe (EU)${NC}     - eu.vipor.net:5040         ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}7. Asia (SG)${NC}       - sg.vipor.net:5040         ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}8. America (US)${NC}    - us.vipor.net:5040         ${CYAN}│${NC}"
+    echo -e "${CYAN}│ ${GREEN}9. Auto Select (Best Ping)${NC}                    ${CYAN}│${NC}"
+    echo -e "${CYAN}└─────────────────────────────────────────────────┘${NC}"
+    echo
+}
+
+# Function to select pool
+select_pool() {
+    while true; do
+        show_pool_menu
+        read -p "$(echo -e "${CYAN}🔗 Select pool (1-9): ${NC}")" pool_choice
+        
+        case $pool_choice in
+            1)
+                SELECTED_POOL="eu.luckpool.net:3960"
+                POOL_NAME="EU-LUCKPOOL"
+                echo -e "${GREEN}✅ Selected: Europe LuckPool${NC}"
+                break
+                ;;
+            2)
+                SELECTED_POOL="sg.luckpool.net:3960"
+                POOL_NAME="SG-LUCKPOOL"
+                echo -e "${GREEN}✅ Selected: Asia LuckPool${NC}"
+                break
+                ;;
+            3)
+                SELECTED_POOL="us.luckpool.net:3960"
+                POOL_NAME="US-LUCKPOOL"
+                echo -e "${GREEN}✅ Selected: America LuckPool${NC}"
+                break
+                ;;
+            4)
+                SELECTED_POOL="au.luckpool.net:3960"
+                POOL_NAME="AU-LUCKPOOL"
+                echo -e "${GREEN}✅ Selected: Australia LuckPool${NC}"
+                break
+                ;;
+            5)
+                SELECTED_POOL="br.luckpool.net:3960"
+                POOL_NAME="BR-LUCKPOOL"
+                echo -e "${GREEN}✅ Selected: Brazil LuckPool${NC}"
+                break
+                ;;
+            6)
+                SELECTED_POOL="eu.vipor.net:5040"
+                POOL_NAME="EU-VIPOR"
+                echo -e "${GREEN}✅ Selected: Europe Vipor${NC}"
+                break
+                ;;
+            7)
+                SELECTED_POOL="sg.vipor.net:5040"
+                POOL_NAME="SG-VIPOR"
+                echo -e "${GREEN}✅ Selected: Asia Vipor${NC}"
+                break
+                ;;
+            8)
+                SELECTED_POOL="us.vipor.net:5040"
+                POOL_NAME="US-VIPOR"
+                echo -e "${GREEN}✅ Selected: America Vipor${NC}"
+                break
+                ;;
+            9)
+                SELECTED_POOL="auto"
+                POOL_NAME="AUTO-SELECT"
+                echo -e "${GREEN}✅ Selected: Auto Pool Selection${NC}"
+                break
+                ;;
+            *)
+                echo -e "${RED}✗ Invalid selection. Please choose 1-9${NC}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# Function to get user input
+get_user_input() {
+    echo -e "${BLUE}💳 MINING CONFIGURATION SETUP${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    
+    # Wallet Address input with validation
+    while true; do
+        read -p "$(echo -e "${CYAN}💰 Enter Wallet Address: ${NC}")" WALLET_ADDRESS
+        if [[ -n "$WALLET_ADDRESS" && ${#WALLET_ADDRESS} -ge 10 ]]; then
+            echo -e "${GREEN}✓ Valid wallet address format${NC}"
+            break
+        else
+            echo -e "${RED}✗ Invalid wallet address (min 10 characters)${NC}"
+        fi
+    done
+    
+    # Worker Name input with validation
+    while true; do
+        read -p "$(echo -e "${CYAN}👷 Enter Worker Name: ${NC}")" WORKER_NAME
+        if [[ -n "$WORKER_NAME" && ${#WORKER_NAME} -ge 1 ]]; then
+            echo -e "${GREEN}✓ Valid worker name${NC}"
+            break
+        else
+            echo -e "${RED}✗ Worker name cannot be empty${NC}"
+        fi
+    done
+    
+    # CPU Usage input with validation
+    while true; do
+        read -p "$(echo -e "${CYAN}⚡ Enter CPU Usage (1-100%): ${NC}")" CPU_USAGE
+        if [[ "$CPU_USAGE" =~ ^[0-9]+$ ]] && [ "$CPU_USAGE" -ge 1 ] && [ "$CPU_USAGE" -le 100 ]; then
+            echo -e "${GREEN}✓ CPU usage set to ${CPU_USAGE}%${NC}"
+            break
+        else
+            echo -e "${RED}✗ Please enter a number between 1-100${NC}"
+        fi
+    done
+    
+    # Pool selection
+    select_pool
+}
+
+# Function to create config with user input
+create_config() {
+    local pool_url=""
+    local pool_name=""
+    
+    # Determine pool URL based on selection
+    case $SELECTED_POOL in
+        "eu.luckpool.net:3960")
+            pool_url="stratum+tcp://eu.luckpool.net:3960"
+            pool_name="EU-LUCKPOOL"
+            ;;
+        "sg.luckpool.net:3960")
+            pool_url="stratum+tcp://sg.luckpool.net:3960"
+            pool_name="SG-LUCKPOOL"
+            ;;
+        "us.luckpool.net:3960")
+            pool_url="stratum+tcp://us.luckpool.net:3960"
+            pool_name="US-LUCKPOOL"
+            ;;
+        "au.luckpool.net:3960")
+            pool_url="stratum+tcp://au.luckpool.net:3960"
+            pool_name="AU-LUCKPOOL"
+            ;;
+        "br.luckpool.net:3960")
+            pool_url="stratum+tcp://br.luckpool.net:3960"
+            pool_name="BR-LUCKPOOL"
+            ;;
+        "eu.vipor.net:5040")
+            pool_url="stratum+tcp://eu.vipor.net:5040"
+            pool_name="EU-VIPOR"
+            ;;
+        "sg.vipor.net:5040")
+            pool_url="stratum+tcp://sg.vipor.net:5040"
+            pool_name="SG-VIPOR"
+            ;;
+        "us.vipor.net:5040")
+            pool_url="stratum+tcp://us.vipor.net:5040"
+            pool_name="US-VIPOR"
+            ;;
+        "auto")
+            pool_url="stratum+tcp://sg.vipor.net:5040"
+            pool_name="AUTO-VIPOR"
+            ;;
+    esac
+    
+    # Calculate threads based on CPU usage (assuming 8 cores max)
+    threads=$(( (CPU_USAGE * 8) / 100 ))
+    if [ $threads -lt 1 ]; then
+        threads=1
+    fi
+    
+    simulate_hacker_loading "Creating optimized config.json" 1.0
+    
+    cat > $CONFIG_FILE << EOF
+{
+    "pools": [
+        {
+            "name": "$pool_name",
+            "url": "$pool_url",
+            "user": "$WALLET_ADDRESS.$WORKER_NAME",
+            "pass": "x",
+            "timeout": 180,
+            "disabled": 0
+        },
+        {
+            "name": "EU-LUCKPOOL-BACKUP",
+            "url": "stratum+tcp://eu.luckpool.net:3960",
+            "user": "$WALLET_ADDRESS.$WORKER_NAME",
+            "pass": "x",
+            "timeout": 180,
+            "disabled": 1
+        },
+        {
+            "name": "SG-VIPOR-BACKUP",
+            "url": "stratum+tcp://sg.vipor.net:5040",
+            "user": "$WALLET_ADDRESS.$WORKER_NAME",
+            "pass": "x",
+            "timeout": 180,
+            "disabled": 1
+        }
+    ],
+    "algo": "verus",
+    "threads": $threads,
+    "cpu-priority": 1,
+    "cpu-affinity": -1,
+    "retry-pause": 10,
+    "api-allow": "192.168.0.0/16",
+    "api-bind": "0.0.0.0:4068",
+    "quiet": false,
+    "debug": false,
+    "protocol": false,
+    "no-longpoll": false,
+    "no-tcp-keepalive": false,
+    "show-diff": false
+}
+EOF
+
+    echo -e "${GREEN}✅ Configuration file created successfully!${NC}"
+    echo -e "${YELLOW}📁 Location: $CONFIG_FILE${NC}"
+    echo -e "${YELLOW}⚙️  Threads: $threads (${CPU_USAGE}% CPU)${NC}"
+    echo -e "${YELLOW}🔗 Pool: $pool_name${NC}"
+}
+
+# Function to check dependencies
+check_dependencies() {
+    echo -e "${PURPLE}🔍 SYSTEM DEPENDENCY CHECK${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    
+    local deps_ok=true
+    
+    # Check bc
+    if ! command -v bc &> /dev/null; then
+        echo -e "${RED}✗ bc not found${NC}"
+        deps_ok=false
+    else
+        echo -e "${GREEN}✓ bc calculator${NC}"
+    fi
+    
+    # Check jq for JSON parsing
+    if ! command -v jq &> /dev/null; then
+        echo -e "${YELLOW}⚠ jq not found (optional)${NC}"
+    else
+        echo -e "${GREEN}✓ jq JSON processor${NC}"
+    fi
+    
+    # Check directory structure
+    if [ ! -d "$CCMINER_PATH" ]; then
+        echo -e "${YELLOW}⚠ Creating ccminer directory${NC}"
+        mkdir -p $CCMINER_PATH
+    fi
+    
+    if [ ! -f "$CCMINER_BIN" ]; then
+        echo -e "${RED}✗ ccminer binary not found at $CCMINER_BIN${NC}"
+        echo -e "${YELLOW}Please download ccminer and place it in $CCMINER_PATH${NC}"
+        deps_ok=false
+    else
+        echo -e "${GREEN}✓ ccminer binary${NC}"
+    fi
+    
+    if [ "$deps_ok" = false ]; then
+        echo -e "\n${RED}❌ Missing dependencies. Please install required packages.${NC}"
+        echo -e "${YELLOW}Run: sudo apt-get update && sudo apt-get install bc jq${NC}"
+        exit 1
+    fi
+    
+    echo -e "\n${GREEN}✅ All dependencies satisfied${NC}"
+}
+
+# Function to validate configuration
+validate_config() {
+    echo -e "${BLUE}🔍 CONFIGURATION VALIDATION${NC}"
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo -e "${RED}✗ Config file not found${NC}"
+        return 1
+    fi
+    
+    # Basic JSON validation
+    if python3 -m json.tool "$CONFIG_FILE" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Valid JSON structure${NC}"
+    else
+        echo -e "${RED}✗ Invalid JSON configuration${NC}"
+        return 1
+    fi
+    
+    # Check if required fields exist
+    if grep -q "\"user\":" "$CONFIG_FILE" && grep -q "\"url\":" "$CONFIG_FILE"; then
+        echo -e "${GREEN}✓ Required configuration fields present${NC}"
+    else
+        echo -e "${RED}✗ Missing required configuration fields${NC}"
+        return 1
+    fi
+    
+    simulate_hacker_loading "Final configuration validation" 0.5
+    return 0
+}
+
+# Function to display final configuration
+show_config_summary() {
+    echo -e "${PURPLE}📊 MINING CONFIGURATION SUMMARY${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    echo -e "${YELLOW}💰 Wallet: ${GREEN}$WALLET_ADDRESS${NC}"
+    echo -e "${YELLOW}👷 Worker: ${GREEN}$WORKER_NAME${NC}"
+    echo -e "${YELLOW}⚡ CPU Usage: ${GREEN}${CPU_USAGE}%${NC}"
+    echo -e "${YELLOW}🔗 Pool: ${GREEN}$POOL_NAME${NC}"
+    echo -e "${YELLOW}📁 Config: ${GREEN}$CONFIG_FILE${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+}
+
+# Function to launch miner
+launch_miner() {
+    echo
+    echo -e "${GREEN}🚀 INITIATING MINING SEQUENCE${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    
+    # Final countdown with hacker style
+    for i in {5..1}; do
+        echo -e "${RED}LAUNCH IN T-${i}... ${YELLOW}[SYSTEM_ARMED]${NC}"
+        sleep 1
+    done
+    
+    echo -e "${GREEN}🎯 MINER ACTIVATED! Press Ctrl+C to terminate.${NC}"
+    echo -e "${CYAN}=================================================${NC}"
+    echo
+    
+    # Launch the miner
+    if [ -f "$CCMINER_BIN" ] && [ -f "$CONFIG_FILE" ]; then
+        $CCMINER_BIN -c $CONFIG_FILE
+    else
+        echo -e "${RED}❌ ERROR: Miner binary or config not found${NC}"
+        exit 1
+    fi
+}
+
+# Main function
+main() {
+    display_banner
+    
+    # Initial system check
+    simulate_hacker_loading "System initialization" 1.5
+    
+    check_dependencies
+    get_user_input
+    
+    # Configuration phase
+    simulate_hacker_loading "Processing mining parameters" 0.8
+    create_config
+    
+    if validate_config; then
+        show_config_summary
+        launch_miner
+    else
+        echo -e "${RED}❌ Configuration validation failed${NC}"
+        echo -e "${YELLOW}Please check your settings and try again${NC}"
+        exit 1
+    fi
+}
+
+# Error handling and cleanup
+cleanup() {
+    echo -e "\n${RED}⚠ Script interrupted${NC}"
+    echo -e "${YELLOW}Cleaning up...${NC}"
+    exit 1
+}
+
+# Set trap for cleanup
+trap cleanup INT TERM
+
+# Check if script is being sourced or executed
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Script is being executed
+    main "$@"
+fi
