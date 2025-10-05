@@ -14,8 +14,8 @@ apt install wget bc jq libjansson -y
 One Installeted Complated :
 ```
 mkdir ccminer && cd ccminer
-wget https://raw.githubusercontent.com/ITCYBERSECURITY-LEGION7-TEAM/PreCompileMiner-Verus/Generic/start
-wget https://raw.githubusercontent.com/ITCYBERSECURITY-LEGION7-TEAM/PreCompileMiner-Verus/Generic/ccminer
+wget https://raw.githubusercontent.com/ITCYBERSECURITY-LEGION7-TEAM/ccminer/Generic/start
+wget https://raw.githubusercontent.com/ITCYBERSECURITY-LEGION7-TEAM/ccminer/Generic/ccminer
 chmod +x ccminer start
 ```
 
